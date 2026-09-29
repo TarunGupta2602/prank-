@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Microsoft Security Alert Prank
 
-## Getting Started
+Next.js + TypeScript prank page that looks like a Windows Security lock screen.
 
-First, run the development server:
+## Local run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Escape / unlock (for you & friends)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Kisi bhi **Microsoft 4-color logo** pe **8 baar click** — prank unlock.
 
-## Learn More
+## Stuck behavior
 
-To learn more about Next.js, take a look at the following resources:
+- Pehli click → voice warning (screen padhne ko bolti hai) + fullscreen + alert
+- Har click / Deny / close / back / F5 → phir alert + naya popup
+- Page **sabke liye** open hai (IP lock nahi)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Vercel deploy (no custom domain)
 
-## Deploy on Vercel
+1. Push this repo to GitHub
+2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import the repo
+3. Click **Deploy** (defaults are fine)
+4. Share the free URL like `https://your-project.vercel.app` with friends
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Or CLI:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npx vercel
+```
+
+## Notes
+
+- Ye sirf visual prank hai — passwords / cards collect nahi hote
+- Sirf doston ke saath use karo; strangers pe mat chalao
+- Beep sound + fullscreen + back/refresh block se “stuck” feel aata hai
