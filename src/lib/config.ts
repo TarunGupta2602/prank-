@@ -1,9 +1,9 @@
-export const PHONE = "+1-877-592-0389";
-export const PHONE_TEL = "+18775920389";
+export const PHONE = "+1-503-877-9717";
+export const PHONE_TEL = "+15038779717";
 
 /** Number voice ke liye clear digits */
 export const PHONE_SPOKEN =
-  "plus one, eight seven seven, five nine two, zero three eight nine";
+  "plus one, five zero three, eight seven seven, nine seven one seven";
 
 /**
  * Pura problem + helpline number — ek paragraph voice padhegi.
