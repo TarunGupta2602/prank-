@@ -1,19 +1,31 @@
 export const PHONE = "+1-877-592-0389";
 export const PHONE_TEL = "+18775920389";
 
-/** Screen pe jo dikhta hai — wahi voice padhegi */
-export const VOICE_LINES = [
-  "Microsoft Windows Security Center.",
-  "Virus slash Malware infections have been recognized on your device.",
-  "Microsoft Windows is infected with Trojan S Locker.",
-  "Spyware alert. Your firewall has been disabled. Remote access was detected.",
-  "Your personal data, banking information and web login credentials saved on this PC are at risk due to a major security breach.",
-  "Please read the information on your screen carefully.",
-  "Do not close this window. Do not restart your PC.",
-  `Call Microsoft Windows Support: ${PHONE}. Helpline.`,
-  `Call Microsoft Windows Support ${PHONE}. Head Office.`,
-  "A critical error has occurred due to the outdated version of the browser. Contact Microsoft Windows Support for immediate assistance.",
-];
+/** Number voice ke liye clear digits */
+export const PHONE_SPOKEN =
+  "plus one, eight seven seven, five nine two, zero three eight nine";
+
+/**
+ * Pura problem + helpline number — ek paragraph voice padhegi.
+ */
+export const VOICE_PARAGRAPH =
+  `Attention. This is an official message from Microsoft Windows Security Center. ` +
+  `Please listen carefully and read the information on your screen. ` +
+  `A critical security problem has been found on your computer. ` +
+  `Virus and malware infections have been recognized on your device. ` +
+  `Microsoft Windows is infected with Trojan S Locker. ` +
+  `Additional threats detected include Spyware Win thirty two Key Logger, Backdoor Remote Access, and Adware Browser Hijack. ` +
+  `Your firewall has been disabled by an unauthorized process. ` +
+  `Windows Defender has been tampered with and is offline. ` +
+  `A suspicious outbound connection to an unknown host was detected. ` +
+  `Someone may be trying to access your browser password vault, camera, and microphone. ` +
+  `Because of this major security breach, your personal data, banking information, and web login credentials saved on this PC are at serious risk. ` +
+  `A critical error has also occurred due to an outdated version of the browser. ` +
+  `Do not close this window. Do not restart your PC. Do not ignore this warning. ` +
+  `To protect your files and remove these infections, you must call Microsoft Windows Support immediately. ` +
+  `The helpline number to call is ${PHONE_SPOKEN}. ` +
+  `I repeat, call Microsoft Windows Support now at ${PHONE_SPOKEN}. ` +
+  `That number again is ${PHONE}. Stay on this page while you dial the number.`;
 
 export const ALERT_MSG =
   "⚠ VIRUS DETECTED!\n\nMicrosoft Windows Security found Trojan:SLocker.\n\nREAD the information on screen.\n\nCall Microsoft Support:\n" +

